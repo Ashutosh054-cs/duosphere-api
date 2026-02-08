@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    function isGroupMember(groupId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+    
+    function isGroupAdmin(groupId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/groups/$(groupId)).data.adminIds.hasAny([request.auth.uid]);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false; // Prevent deletion
+    }
+
+    // Friend requests
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated() && 
+                    (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.from == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.to == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                      (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+    }
+
+    // Friendships
+    match /friendships/{friendshipId} {
+      allow read: if isAuthenticated() && resource.data.users.hasAny([request.auth.uid]);
+      allow create: if isAuthenticated() && request.resource.data.users.hasAny([request.auth.uid]);
+      allow delete: if isAuthenticated() && resource.data.users.hasAny([request.auth.uid]);
+    }
+
+    // Groups
+    match /groups/{groupId} {
+      allow read: if isGroupMember(groupId);
+      allow create: if isAuthenticated();
+      allow update: if isGroupAdmin(groupId);
+      allow delete: if isGroupAdmin(groupId);
+
+      // Group members subcollection
+      match /members/{userId} {
+        allow read: if isGroupMember(groupId);
+        allow write: if isGroupAdmin(groupId) || isOwner(userId);
+      }
+
+      // Group messages subcollection
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) && request.resource.data.senderId == request.auth.uid;
+        allow update: if isGroupMember(groupId); // For read receipts
+        allow delete: if isGroupAdmin(groupId) || 
+                        (isGroupMember(groupId) && resource.data.senderId == request.auth.uid);
+      }
+
+      // Group timer
+      match /timer/current {
+        allow read: if isGroupMember(groupId);
+        allow write: if isGroupMember(groupId);
+      }
+    }
+
+    // Todos
+    match /todos/{todoId} {
+      allow read: if isAuthenticated() && 
+                    (resource.data.userId == request.auth.uid || 
+                     (resource.data.groupId != null && isGroupMember(resource.data.groupId)));
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Direct messages
+    match /directMessages/{messageId} {
+      allow read: if isAuthenticated() && 
+                    (resource.data.senderId == request.auth.uid || 
+                     resource.data.receiverId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                      (resource.data.senderId == request.auth.uid || 
+                       resource.data.receiverId == request.auth.uid);
+    }
+
+    // Study sessions
+    match /studySessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Presence
+    match /presence/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

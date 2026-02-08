@@ -1,0 +1,40 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    function isValidImageFile() {
+      return request.resource.size < 5 * 1024 * 1024 && // 5MB max
+             request.resource.contentType.matches('image/.*');
+    }
+
+    // Todo proof images
+    match /todo-proofs/{todoId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidImageFile();
+      allow delete: if isAuthenticated();
+    }
+
+    // User avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true; // Public read
+      allow write: if isOwner(userId) && isValidImageFile();
+      allow delete: if isOwner(userId);
+    }
+
+    // Group images
+    match /groups/{groupId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidImageFile();
+      allow delete: if isAuthenticated();
+    }
+  }
+}

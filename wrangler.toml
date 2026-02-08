@@ -1,0 +1,14 @@
+name = "duosphere-api"
+main = "server/worker.ts"
+compatibility_date = "2026-02-08"
+
+[vars]
+ENVIRONMENT = "development"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "duosphere"
+database_id = "83074e31-5ed3-4c16-a223-7f74b65b41d8"
+
+[dev]
+port = 8787
